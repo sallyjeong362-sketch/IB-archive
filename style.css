@@ -71,7 +71,7 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: #185FA5
 .toolbar {
   max-width: 980px; margin: 0 auto 1.5rem; display: flex; gap: 10px; flex-wrap: wrap;
 }
-.toolbar #searchInput { flex: 2; min-width: 200px; }
+.toolbar #searchInput, .toolbar #textbookSearchInput { flex: 2; min-width: 200px; }
 .toolbar #subjectFilter { flex: 1; min-width: 160px; }
 .toolbar .btn { white-space: nowrap; }
 
