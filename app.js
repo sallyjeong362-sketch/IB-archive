@@ -13,11 +13,45 @@ import {
 const CONFIG_KEY = "ibArchiveFirebaseConfig";
 const NAME_KEY = "ibArchiveTeacherName";
 
+// IB PYP Programme of Inquiry taxonomy
+const UOI_UNITS = [
+  { key: "who-we-are", name: "Who We Are", color: "#E0812F" },
+  { key: "how-we-express-ourselves", name: "How We Express Ourselves", color: "#D6247A" },
+  { key: "how-we-organise-ourselves", name: "How We Organise Ourselves", color: "#1FA6A0" },
+  { key: "how-the-world-works", name: "How the World Works", color: "#2E9FD6" },
+  { key: "sharing-the-planet", name: "Sharing the Planet", color: "#7CB342" },
+  { key: "where-we-are-in-place-and-time", name: "Where We Are in Place and Time", color: "#5E3A87" },
+];
+const UOI_CATEGORIES = [
+  { key: "central-idea", name: "Central Idea" },
+  { key: "specified-concepts", name: "Specified Concepts" },
+  { key: "additional-concepts", name: "Additional Concepts" },
+  { key: "atl-skills", name: "ATL Skills & Sub-skills" },
+  { key: "learner-profile-attributes", name: "Learner Profile Attributes" },
+  { key: "language-focus", name: "Language Focus" },
+];
+const LEARNER_PROFILE = [
+  { key: "inquirers", name: "Inquirers (탐구하는 사람)" },
+  { key: "knowledgeable", name: "Knowledgeable (지식이 풍부한 사람)" },
+  { key: "thinkers", name: "Thinkers (생각하는 사람)" },
+  { key: "communicators", name: "Communicators (소통하는 사람)" },
+  { key: "principled", name: "Principled (원칙을 지키는 사람)" },
+  { key: "open-minded", name: "Open-minded (열린 마음을 지닌 사람)" },
+  { key: "caring", name: "Caring (배려하는 사람)" },
+  { key: "risk-takers", name: "Risk-takers (도전하는 사람)" },
+  { key: "balanced", name: "Balanced (균형 잡힌 사람)" },
+  { key: "reflective", name: "Reflective (성찰하는 사람)" },
+];
+const UOI_BY_KEY = Object.fromEntries(UOI_UNITS.map((u) => [u.key, u]));
+const CATEGORY_BY_KEY = Object.fromEntries(UOI_CATEGORIES.map((c) => [c.key, c]));
+const PROFILE_BY_KEY = Object.fromEntries(LEARNER_PROFILE.map((p) => [p.key, p]));
+
 let app, auth, db, storage, currentUser = null;
 let posts = []; // cached posts from Firestore, newest first
 let unsubComments = null;
 let activeDetailPostId = null;
 let linkRowCount = 0;
+let selectedUoi = null;
 
 const $ = (id) => document.getElementById(id);
 
@@ -90,6 +124,49 @@ document.querySelectorAll(".modal-overlay").forEach((overlay) => {
     if (e.target === overlay) overlay.hidden = true;
   });
 });
+
+// ---------- IB taxonomy pickers (static UI, no Firebase needed) ----------
+
+function renderUoiButtons() {
+  $("uoiButtons").innerHTML = UOI_UNITS.map((u) => `
+    <button type="button" class="uoi-btn" data-uoi="${u.key}" style="background:${u.color}">${escapeHtml(u.name)}</button>
+  `).join("");
+  $("uoiButtons").querySelectorAll(".uoi-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const key = btn.dataset.uoi;
+      selectedUoi = selectedUoi === key ? null : key;
+      $("uoiButtons").querySelectorAll(".uoi-btn").forEach((b) => {
+        b.classList.toggle("active", b.dataset.uoi === selectedUoi);
+      });
+    });
+  });
+}
+
+function renderCategoryChecks() {
+  $("categoryChecks").innerHTML = UOI_CATEGORIES.map((c) => `
+    <label class="check-item"><input type="checkbox" value="${c.key}">${escapeHtml(c.name)}</label>
+  `).join("");
+}
+
+function renderProfileChecks() {
+  $("profileChecks").innerHTML = LEARNER_PROFILE.map((p) => `
+    <label class="check-item"><input type="checkbox" value="${p.key}">${escapeHtml(p.name)}</label>
+  `).join("");
+}
+
+function renderTaxonomyFilters() {
+  $("uoiFilter").innerHTML = '<option value="">전체 탐구단원</option>' +
+    UOI_UNITS.map((u) => `<option value="${u.key}">${escapeHtml(u.name)}</option>`).join("");
+  $("categoryFilter").innerHTML = '<option value="">전체 영역</option>' +
+    UOI_CATEGORIES.map((c) => `<option value="${c.key}">${escapeHtml(c.name)}</option>`).join("");
+  $("profileFilter").innerHTML = '<option value="">전체 학습자상</option>' +
+    LEARNER_PROFILE.map((p) => `<option value="${p.key}">${escapeHtml(p.name)}</option>`).join("");
+}
+
+renderUoiButtons();
+renderCategoryChecks();
+renderProfileChecks();
+renderTaxonomyFilters();
 
 // ---------- bootstrap ----------
 
@@ -269,11 +346,22 @@ function populateSubjectFilter() {
 function renderPostList() {
   const search = $("searchInput").value.trim().toLowerCase();
   const subject = $("subjectFilter").value;
+  const uoi = $("uoiFilter").value;
+  const category = $("categoryFilter").value;
+  const profile = $("profileFilter").value;
 
   const filtered = posts.filter((p) => {
     if (subject && !(p.tags || []).includes(subject)) return false;
+    if (uoi && p.uoi !== uoi) return false;
+    if (category && !(p.categories || []).includes(category)) return false;
+    if (profile && !(p.learnerProfile || []).includes(profile)) return false;
     if (!search) return true;
-    const haystack = [p.title, p.lessonText, p.actionDescription, ...(p.tags || [])].join(" ").toLowerCase();
+    const haystack = [
+      p.title, p.lessonText, p.actionDescription, ...(p.tags || []),
+      p.uoi ? UOI_BY_KEY[p.uoi]?.name : "",
+      ...(p.categories || []).map((k) => CATEGORY_BY_KEY[k]?.name || ""),
+      ...(p.learnerProfile || []).map((k) => PROFILE_BY_KEY[k]?.name || ""),
+    ].join(" ").toLowerCase();
     return haystack.includes(search);
   });
 
@@ -296,9 +384,12 @@ function renderPostCard(p) {
     imgCount ? `🖼️ ${imgCount}` : "",
     linkCount ? `🔗 ${linkCount}` : "",
   ].filter(Boolean).join("  ");
+  const uoi = p.uoi ? UOI_BY_KEY[p.uoi] : null;
+  const uoiPill = uoi ? `<div class="post-uoi"><span class="uoi-pill" style="background:${uoi.color}">${escapeHtml(uoi.name)}</span></div>` : "";
 
   return `
     <div class="post-card" data-id="${p.id}">
+      ${uoiPill}
       <h3>${escapeHtml(p.title)}</h3>
       ${tags ? `<div class="post-tags">${tags}</div>` : ""}
       <p class="post-preview">${escapeHtml(preview)}</p>
@@ -311,6 +402,9 @@ function renderPostCard(p) {
 
 $("searchInput").addEventListener("input", renderPostList);
 $("subjectFilter").addEventListener("change", renderPostList);
+$("uoiFilter").addEventListener("change", renderPostList);
+$("categoryFilter").addEventListener("change", renderPostList);
+$("profileFilter").addEventListener("change", renderPostList);
 
 // ---------- new post ----------
 
@@ -323,6 +417,10 @@ $("newPostBtn").addEventListener("click", () => {
   $("imageInput").value = "";
   $("linkRows").innerHTML = "";
   linkRowCount = 0;
+  selectedUoi = null;
+  $("uoiButtons").querySelectorAll(".uoi-btn").forEach((b) => b.classList.remove("active"));
+  $("categoryChecks").querySelectorAll("input[type=checkbox]").forEach((c) => { c.checked = false; });
+  $("profileChecks").querySelectorAll("input[type=checkbox]").forEach((c) => { c.checked = false; });
   $("postError").hidden = true;
   addLinkRow();
   openModal("newPostModal");
@@ -348,6 +446,10 @@ function collectLinks() {
     const label = row.querySelector(".link-label").value.trim();
     return { url, label };
   }).filter((l) => l.url);
+}
+
+function collectCheckedValues(containerId) {
+  return [...document.querySelectorAll(`#${containerId} input[type=checkbox]:checked`)].map((c) => c.value);
 }
 
 async function uploadFileList(fileList, postId) {
@@ -401,6 +503,9 @@ $("submitPostBtn").addEventListener("click", async () => {
     await setDoc(newDocRef, {
       title,
       tags,
+      uoi: selectedUoi,
+      categories: collectCheckedValues("categoryChecks"),
+      learnerProfile: collectCheckedValues("profileChecks"),
       lessonText: $("postText").value.trim(),
       actionDescription: $("postAction").value.trim(),
       files,
@@ -451,6 +556,19 @@ function renderDetail(p) {
   $("detailTitle").textContent = p.title;
   $("detailMeta").textContent = `${p.authorName || "익명"} · ${formatDate(p.createdAt)}`;
   $("detailTags").innerHTML = (p.tags || []).map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join("");
+
+  const uoi = p.uoi ? UOI_BY_KEY[p.uoi] : null;
+  $("detailUoi").innerHTML = uoi ? `<span class="uoi-pill" style="background:${uoi.color}">${escapeHtml(uoi.name)}</span>` : "";
+
+  const categories = p.categories || [];
+  $("detailCategoryBlock").hidden = categories.length === 0;
+  $("detailCategories").innerHTML = categories.map((k) =>
+    `<span class="tag">${escapeHtml(CATEGORY_BY_KEY[k]?.name || k)}</span>`).join("");
+
+  const learnerProfile = p.learnerProfile || [];
+  $("detailProfileBlock").hidden = learnerProfile.length === 0;
+  $("detailProfiles").innerHTML = learnerProfile.map((k) =>
+    `<span class="tag">${escapeHtml(PROFILE_BY_KEY[k]?.name || k)}</span>`).join("");
 
   $("detailTextBlock").hidden = !p.lessonText;
   $("detailText").textContent = p.lessonText || "";

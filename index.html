@@ -73,6 +73,15 @@
     <select id="subjectFilter">
       <option value="">전체 과목/태그</option>
     </select>
+    <select id="uoiFilter">
+      <option value="">전체 탐구단원</option>
+    </select>
+    <select id="categoryFilter">
+      <option value="">전체 영역</option>
+    </select>
+    <select id="profileFilter">
+      <option value="">전체 학습자상</option>
+    </select>
     <button id="newPostBtn" class="btn primary">+ 새 자료 등록</button>
   </div>
 
@@ -96,6 +105,18 @@
       <div class="field">
         <label for="postTags">과목 / 학년 / 태그 (쉼표로 구분)</label>
         <input type="text" id="postTags" placeholder="예: 수학, 3학년, 분수">
+      </div>
+      <div class="field">
+        <label>탐구단원 (Unit of Inquiry)</label>
+        <div id="uoiButtons" class="uoi-buttons"></div>
+      </div>
+      <div class="field">
+        <label>해당 영역 (중복 선택 가능)</label>
+        <div id="categoryChecks" class="check-grid"></div>
+      </div>
+      <div class="field">
+        <label>IB 학습자상 (중복 선택 가능)</label>
+        <div id="profileChecks" class="check-grid profile-grid"></div>
       </div>
       <div class="field">
         <label for="postText">수업에 쓰인 텍스트 / 내용</label>
@@ -136,7 +157,18 @@
     </div>
     <div class="modal-body">
       <div id="detailMeta" class="detail-meta"></div>
+      <div id="detailUoi" class="detail-uoi"></div>
       <div id="detailTags" class="detail-tags"></div>
+
+      <div id="detailCategoryBlock" class="detail-block">
+        <h3>해당 영역</h3>
+        <div id="detailCategories" class="detail-tags"></div>
+      </div>
+
+      <div id="detailProfileBlock" class="detail-block">
+        <h3>IB 학습자상</h3>
+        <div id="detailProfiles" class="detail-tags"></div>
+      </div>
 
       <div id="detailTextBlock" class="detail-block">
         <h3>수업에 쓰인 텍스트 / 내용</h3>
