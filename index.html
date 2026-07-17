@@ -68,26 +68,95 @@
     </div>
   </header>
 
-  <div class="toolbar">
-    <input type="text" id="searchInput" placeholder="🔍 제목, 내용, 과목으로 검색">
-    <select id="subjectFilter">
-      <option value="">전체 과목/태그</option>
-    </select>
-    <select id="uoiFilter">
-      <option value="">전체 탐구단원</option>
-    </select>
-    <select id="categoryFilter">
-      <option value="">전체 영역</option>
-    </select>
-    <select id="profileFilter">
-      <option value="">전체 학습자상</option>
-    </select>
-    <button id="newPostBtn" class="btn primary">+ 새 자료 등록</button>
+  <div id="breadcrumb" class="breadcrumb"></div>
+
+  <!-- 1단계: 교재 목록 -->
+  <div id="textbookView">
+    <div class="toolbar">
+      <button id="newTextbookBtn" class="btn primary">+ 새 교재 등록</button>
+    </div>
+    <div id="textbookList" class="textbook-grid"></div>
+    <p id="textbookEmptyNote" class="empty-note" hidden>아직 등록된 교재가 없습니다. 첫 교재를 등록해보세요!</p>
+    <p id="textbookLoadingNote" class="empty-note">불러오는 중...</p>
   </div>
 
-  <div id="postList" class="post-list"></div>
-  <p id="emptyNote" class="empty-note" hidden>아직 등록된 자료가 없습니다. 첫 자료를 등록해보세요!</p>
-  <p id="loadingNote" class="empty-note">불러오는 중...</p>
+  <!-- 2단계: 유닛 목록 -->
+  <div id="unitView" hidden>
+    <div class="toolbar">
+      <button id="newUnitBtn" class="btn primary">+ 새 유닛 추가</button>
+    </div>
+    <div id="unitList" class="unit-grid"></div>
+    <p id="unitEmptyNote" class="empty-note" hidden>아직 등록된 유닛이 없습니다. 첫 유닛을 추가해보세요!</p>
+  </div>
+
+  <!-- 3단계: 유닛 안의 자료 목록 -->
+  <div id="postView" hidden>
+    <div class="toolbar">
+      <input type="text" id="searchInput" placeholder="🔍 제목, 내용, 과목으로 검색">
+      <select id="subjectFilter">
+        <option value="">전체 과목/태그</option>
+      </select>
+      <select id="uoiFilter">
+        <option value="">전체 탐구단원</option>
+      </select>
+      <select id="categoryFilter">
+        <option value="">전체 영역</option>
+      </select>
+      <select id="profileFilter">
+        <option value="">전체 학습자상</option>
+      </select>
+      <button id="newPostBtn" class="btn primary">+ 새 자료 등록</button>
+    </div>
+
+    <div id="postList" class="post-list"></div>
+    <p id="emptyNote" class="empty-note" hidden>아직 등록된 자료가 없습니다. 첫 자료를 등록해보세요!</p>
+  </div>
+</div>
+
+<!-- 새 교재 등록 모달 -->
+<div id="newTextbookModal" class="modal-overlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2>새 교재 등록</h2>
+      <button class="modal-close" data-close="newTextbookModal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="textbookName">교재 이름 *</label>
+        <input type="text" id="textbookName" placeholder="예: 우리반 영어 교재" maxlength="80">
+      </div>
+      <div class="field">
+        <label for="textbookCoverInput">교재 이미지 (표지)</label>
+        <input type="file" id="textbookCoverInput" accept="image/*">
+      </div>
+      <div id="textbookError" class="error-box" hidden></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close="newTextbookModal">취소</button>
+      <button id="submitTextbookBtn" class="btn primary">등록하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 새 유닛 추가 모달 -->
+<div id="newUnitModal" class="modal-overlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2>새 유닛 추가</h2>
+      <button class="modal-close" data-close="newUnitModal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="unitName">유닛 이름 *</label>
+        <input type="text" id="unitName" placeholder="예: Unit 1, Unit 2 ...">
+      </div>
+      <div id="unitError" class="error-box" hidden></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close="newUnitModal">취소</button>
+      <button id="submitUnitBtn" class="btn primary">추가하기</button>
+    </div>
+  </div>
 </div>
 
 <!-- 새 자료 등록 모달 -->

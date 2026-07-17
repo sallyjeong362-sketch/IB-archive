@@ -4,14 +4,16 @@
 
 ## 주요 기능
 
+- 📘 **교재(표지 이미지) → 📂 유닛 → 📄 자료** 3단계 폴더 구조로 자료를 정리
 - 📖 수업에 쓰인 텍스트/내용 기록
 - ✅ 실제 진행한 활동 설명 기록
 - 📎 파일 업로드 (문서, PPT, PDF 등)
 - 🖼️ 이미지 업로드 (갤러리로 표시)
 - 🔗 외부 링크 연결 (유튜브 링크는 자동으로 영상이 임베드됩니다)
+- 🎯 IB PYP 탐구단원(색깔별)/영역(Central Idea 등)/학습자상 10가지 태그
 - 💬 게시물마다 댓글로 다른 선생님과 의견 공유
-- 🔍 제목/내용/과목·태그 검색 및 필터
-- 실시간 동기화: 한 선생님이 자료를 등록하거나 댓글을 달면 다른 선생님 화면에도 바로 반영됩니다.
+- 🔍 제목/내용/과목·태그/탐구단원/영역/학습자상으로 검색 및 필터 (현재 열어본 유닛 안에서 동작)
+- 실시간 동기화: 한 선생님이 교재/유닛/자료를 등록하거나 댓글을 달면 다른 선생님 화면에도 바로 반영됩니다.
 
 빌드 과정이 필요 없는 순수 HTML/CSS/JS 정적 사이트이며, 데이터 저장과 실시간 공유를 위해 [Firebase](https://firebase.google.com/) 무료 요금제(Spark)를 사용합니다.
 
@@ -44,10 +46,16 @@ python3 -m http.server 8080
 
 ## 데이터 구조 (Firestore)
 
-- `posts/{postId}`: `title`, `tags[]`, `lessonText`, `actionDescription`, `files[]`, `images[]`, `links[]`, `authorName`, `authorUid`, `createdAt`
-- `posts/{postId}/comments/{commentId}`: `text`, `authorName`, `authorUid`, `createdAt`
+교재 &gt; 유닛 &gt; 자료 &gt; 댓글 순서로 중첩된 구조입니다.
 
-파일/이미지는 Firebase Storage의 `uploads/{postId}/...` 경로에 저장되고, 다운로드 URL만 Firestore 문서에 저장됩니다.
+- `textbooks/{textbookId}`: `name`, `coverUrl`, `coverPath`, `authorName`, `authorUid`, `createdAt`
+- `textbooks/{textbookId}/units/{unitId}`: `name`, `authorName`, `authorUid`, `createdAt`
+- `.../units/{unitId}/posts/{postId}`: `title`, `tags[]`, `uoi`, `categories[]`, `learnerProfile[]`, `lessonText`, `actionDescription`, `files[]`, `images[]`, `links[]`, `authorName`, `authorUid`, `createdAt`
+- `.../posts/{postId}/comments/{commentId}`: `text`, `authorName`, `authorUid`, `createdAt`
+
+교재 표지 이미지는 Storage의 `textbook-covers/{textbookId}/...` 경로에, 자료 첨부파일/이미지는 `uploads/{textbookId}/{unitId}/{postId}/...` 경로에 저장되고, 다운로드 URL만 Firestore 문서에 저장됩니다.
+
+> 이전 버전(교재/유닛 구조 도입 전)에 등록했던 테스트 게시물은 `posts` 최상위 컬렉션에 남아있으며 새 구조에서는 보이지 않습니다. 필요하면 Firebase 콘솔의 Firestore Database에서 직접 확인하거나 삭제할 수 있습니다.
 
 ## 권한 정책
 

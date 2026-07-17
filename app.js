@@ -47,8 +47,21 @@ const CATEGORY_BY_KEY = Object.fromEntries(UOI_CATEGORIES.map((c) => [c.key, c])
 const PROFILE_BY_KEY = Object.fromEntries(LEARNER_PROFILE.map((p) => [p.key, p]));
 
 let app, auth, db, storage, currentUser = null;
-let posts = []; // cached posts from Firestore, newest first
+
+let textbooks = []; // cached top-level textbook docs
+let units = [];     // cached units for the currently open textbook
+let posts = [];     // cached posts for the currently open unit
+
+let unsubTextbooks = null;
+let unsubUnits = null;
+let unsubPosts = null;
 let unsubComments = null;
+
+let currentTextbookId = null;
+let currentTextbookName = "";
+let currentUnitId = null;
+let currentUnitName = "";
+
 let activeDetailPostId = null;
 let linkRowCount = 0;
 let selectedUoi = null;
@@ -219,7 +232,8 @@ function afterAuthReady() {
 function startApp(name) {
   $("currentUserName").textContent = "🙋 " + name;
   showScreen("app");
-  subscribeToPosts();
+  subscribeTextbooks();
+  goToTextbooks();
 }
 
 // ---------- setup screen ----------
@@ -313,13 +327,237 @@ $("changeNameBtn").addEventListener("click", () => {
   }
 });
 
-// ---------- posts: list & filter ----------
+// ---------- navigation: textbooks > units > posts ----------
+
+function showLevel(level) {
+  ["textbookView", "unitView", "postView"].forEach((id) => { $(id).hidden = id !== level; });
+}
+
+function renderBreadcrumb() {
+  if (!currentTextbookId) {
+    $("breadcrumb").innerHTML = "";
+    return;
+  }
+  const parts = ['<a href="#" data-nav="textbooks">🏠 전체 교재</a>'];
+  if (currentUnitId) {
+    parts.push(`<a href="#" data-nav="units">📘 ${escapeHtml(currentTextbookName)}</a>`);
+    parts.push(`<span>📂 ${escapeHtml(currentUnitName)}</span>`);
+  } else {
+    parts.push(`<span>📘 ${escapeHtml(currentTextbookName)}</span>`);
+  }
+  $("breadcrumb").innerHTML = parts.join(' <span class="crumb-sep">›</span> ');
+  $("breadcrumb").querySelectorAll("[data-nav]").forEach((a) => {
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (a.dataset.nav === "textbooks") goToTextbooks();
+      else if (a.dataset.nav === "units") goToUnits();
+    });
+  });
+}
+
+function goToTextbooks() {
+  currentTextbookId = null;
+  currentTextbookName = "";
+  currentUnitId = null;
+  currentUnitName = "";
+  if (unsubUnits) { unsubUnits(); unsubUnits = null; }
+  if (unsubPosts) { unsubPosts(); unsubPosts = null; }
+  renderBreadcrumb();
+  showLevel("textbookView");
+}
+
+function goToUnits() {
+  currentUnitId = null;
+  currentUnitName = "";
+  if (unsubPosts) { unsubPosts(); unsubPosts = null; }
+  renderBreadcrumb();
+  showLevel("unitView");
+}
+
+function openTextbook(id) {
+  const t = textbooks.find((x) => x.id === id);
+  if (!t) return;
+  currentTextbookId = id;
+  currentTextbookName = t.name;
+  currentUnitId = null;
+  currentUnitName = "";
+  renderBreadcrumb();
+  showLevel("unitView");
+  subscribeUnits();
+}
+
+function openUnit(id) {
+  const u = units.find((x) => x.id === id);
+  if (!u) return;
+  currentUnitId = id;
+  currentUnitName = u.name;
+  renderBreadcrumb();
+  showLevel("postView");
+  subscribeToPosts();
+}
+
+// ---------- textbooks ----------
+
+function subscribeTextbooks() {
+  const q = query(collection(db, "textbooks"), orderBy("createdAt", "desc"));
+  unsubTextbooks = onSnapshot(q, (snap) => {
+    textbooks = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    $("textbookLoadingNote").hidden = true;
+    renderTextbookList();
+  }, (err) => {
+    console.error(err);
+    $("textbookLoadingNote").hidden = true;
+    showToast("교재를 불러오지 못했습니다: " + err.message);
+  });
+}
+
+function renderTextbookList() {
+  $("textbookEmptyNote").hidden = textbooks.length !== 0;
+  $("textbookList").innerHTML = textbooks.map(renderTextbookCard).join("");
+  document.querySelectorAll(".textbook-card").forEach((card) => {
+    card.addEventListener("click", () => openTextbook(card.dataset.id));
+  });
+}
+
+function renderTextbookCard(t) {
+  const cover = t.coverUrl
+    ? `<img class="textbook-cover" src="${escapeHtml(t.coverUrl)}" alt="${escapeHtml(t.name)}">`
+    : `<div class="textbook-cover textbook-cover-empty">📘</div>`;
+  return `
+    <div class="textbook-card" data-id="${t.id}">
+      ${cover}
+      <h3>${escapeHtml(t.name)}</h3>
+      <p class="card-meta">${escapeHtml(t.authorName || "익명")} · ${formatDate(t.createdAt)}</p>
+    </div>`;
+}
+
+$("newTextbookBtn").addEventListener("click", () => {
+  $("textbookName").value = "";
+  $("textbookCoverInput").value = "";
+  $("textbookError").hidden = true;
+  openModal("newTextbookModal");
+});
+
+$("submitTextbookBtn").addEventListener("click", async () => {
+  const name = $("textbookName").value.trim();
+  $("textbookError").hidden = true;
+  if (!name) {
+    $("textbookError").hidden = false;
+    $("textbookError").textContent = "교재 이름을 입력해주세요.";
+    return;
+  }
+  const btn = $("submitTextbookBtn");
+  btn.disabled = true;
+  btn.textContent = "등록 중...";
+  try {
+    const newRef = doc(collection(db, "textbooks"));
+    let coverUrl = null, coverPath = null;
+    const coverFile = $("textbookCoverInput").files[0];
+    if (coverFile) {
+      coverPath = `textbook-covers/${newRef.id}/${Date.now()}_${coverFile.name}`;
+      const coverRef = ref(storage, coverPath);
+      await uploadBytes(coverRef, coverFile);
+      coverUrl = await getDownloadURL(coverRef);
+    }
+    await setDoc(newRef, {
+      name,
+      coverUrl,
+      coverPath,
+      authorName: localStorage.getItem(NAME_KEY) || "익명",
+      authorUid: currentUser.uid,
+      createdAt: serverTimestamp(),
+    });
+    closeModal("newTextbookModal");
+    showToast("교재가 등록되었습니다.");
+  } catch (err) {
+    console.error(err);
+    $("textbookError").hidden = false;
+    $("textbookError").textContent = "등록 중 오류가 발생했습니다: " + err.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "등록하기";
+  }
+});
+
+// ---------- units ----------
+
+function subscribeUnits() {
+  if (unsubUnits) { unsubUnits(); unsubUnits = null; }
+  const q = query(collection(db, "textbooks", currentTextbookId, "units"), orderBy("createdAt", "asc"));
+  unsubUnits = onSnapshot(q, (snap) => {
+    units = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    renderUnitList();
+  }, (err) => {
+    console.error(err);
+    showToast("유닛을 불러오지 못했습니다: " + err.message);
+  });
+}
+
+function renderUnitList() {
+  $("unitEmptyNote").hidden = units.length !== 0;
+  $("unitList").innerHTML = units.map(renderUnitCard).join("");
+  document.querySelectorAll(".unit-card").forEach((card) => {
+    card.addEventListener("click", () => openUnit(card.dataset.id));
+  });
+}
+
+function renderUnitCard(u) {
+  return `
+    <div class="unit-card" data-id="${u.id}">
+      <h3>📂 ${escapeHtml(u.name)}</h3>
+      <p class="card-meta">${escapeHtml(u.authorName || "익명")} · ${formatDate(u.createdAt)}</p>
+    </div>`;
+}
+
+$("newUnitBtn").addEventListener("click", () => {
+  $("unitName").value = "";
+  $("unitError").hidden = true;
+  openModal("newUnitModal");
+});
+
+$("submitUnitBtn").addEventListener("click", async () => {
+  const name = $("unitName").value.trim();
+  $("unitError").hidden = true;
+  if (!name) {
+    $("unitError").hidden = false;
+    $("unitError").textContent = "유닛 이름을 입력해주세요.";
+    return;
+  }
+  const btn = $("submitUnitBtn");
+  btn.disabled = true;
+  try {
+    await addDoc(collection(db, "textbooks", currentTextbookId, "units"), {
+      name,
+      authorName: localStorage.getItem(NAME_KEY) || "익명",
+      authorUid: currentUser.uid,
+      createdAt: serverTimestamp(),
+    });
+    closeModal("newUnitModal");
+    showToast("유닛이 추가되었습니다.");
+  } catch (err) {
+    console.error(err);
+    $("unitError").hidden = false;
+    $("unitError").textContent = "추가 중 오류가 발생했습니다: " + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---------- posts: list & filter (scoped to the current unit) ----------
+
+function currentPostsCollection() {
+  return collection(db, "textbooks", currentTextbookId, "units", currentUnitId, "posts");
+}
+
+function currentPostDoc(postId) {
+  return doc(db, "textbooks", currentTextbookId, "units", currentUnitId, "posts", postId);
+}
 
 function subscribeToPosts() {
-  const q = query(collection(db, "posts"), orderBy("createdAt", "desc"));
-  onSnapshot(q, (snap) => {
+  if (unsubPosts) { unsubPosts(); unsubPosts = null; }
+  const q = query(currentPostsCollection(), orderBy("createdAt", "desc"));
+  unsubPosts = onSnapshot(q, (snap) => {
     posts = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    $("loadingNote").hidden = true;
     populateSubjectFilter();
     renderPostList();
     if (activeDetailPostId) {
@@ -328,7 +566,6 @@ function subscribeToPosts() {
     }
   }, (err) => {
     console.error(err);
-    $("loadingNote").hidden = true;
     showToast("자료를 불러오지 못했습니다: " + err.message);
   });
 }
@@ -452,11 +689,11 @@ function collectCheckedValues(containerId) {
   return [...document.querySelectorAll(`#${containerId} input[type=checkbox]:checked`)].map((c) => c.value);
 }
 
-async function uploadFileList(fileList, postId) {
+async function uploadFileList(fileList, pathPrefix) {
   const files = [...fileList];
   const results = [];
   for (const file of files) {
-    const path = `uploads/${postId}/${Date.now()}_${file.name}`;
+    const path = `${pathPrefix}/${Date.now()}_${file.name}`;
     const fileRef = ref(storage, path);
     await uploadBytes(fileRef, file);
     const url = await getDownloadURL(fileRef);
@@ -488,11 +725,12 @@ $("submitPostBtn").addEventListener("click", async () => {
   try {
     const tags = $("postTags").value.split(",").map((t) => t.trim()).filter(Boolean);
     // Use a client-generated doc id up front so uploaded files can be grouped under it.
-    const newDocRef = doc(collection(db, "posts"));
+    const newDocRef = doc(currentPostsCollection());
+    const pathPrefix = `uploads/${currentTextbookId}/${currentUnitId}/${newDocRef.id}`;
 
     const [files, images] = await Promise.all([
-      uploadFileList($("fileInput").files, newDocRef.id),
-      uploadFileList($("imageInput").files, newDocRef.id),
+      uploadFileList($("fileInput").files, pathPrefix),
+      uploadFileList($("imageInput").files, pathPrefix),
     ]);
 
     const linksWithType = links.map((l) => {
@@ -538,7 +776,7 @@ function openDetail(postId) {
   openModal("detailModal");
 
   if (unsubComments) unsubComments();
-  const q = query(collection(db, "posts", postId, "comments"), orderBy("createdAt", "asc"));
+  const q = query(collection(currentPostDoc(postId), "comments"), orderBy("createdAt", "asc"));
   unsubComments = onSnapshot(q, (snap) => {
     const comments = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
     renderComments(postId, comments);
@@ -612,7 +850,7 @@ async function deletePost(p) {
     await Promise.all([...(p.files || []), ...(p.images || [])].map((f) =>
       deleteObject(ref(storage, f.path)).catch(() => {})
     ));
-    await deleteDoc(doc(db, "posts", p.id));
+    await deleteDoc(currentPostDoc(p.id));
     closeModal("detailModal");
     showToast("삭제되었습니다.");
   } catch (err) {
@@ -646,7 +884,7 @@ function renderComments(postId, comments) {
 async function deleteComment(postId, commentId) {
   if (!confirm("댓글을 삭제하시겠습니까?")) return;
   try {
-    await deleteDoc(doc(db, "posts", postId, "comments", commentId));
+    await deleteDoc(doc(collection(currentPostDoc(postId), "comments"), commentId));
   } catch (err) {
     console.error(err);
     showToast("댓글 삭제 중 오류가 발생했습니다.");
@@ -659,7 +897,7 @@ $("submitCommentBtn").addEventListener("click", async () => {
   const btn = $("submitCommentBtn");
   btn.disabled = true;
   try {
-    await addDoc(collection(db, "posts", activeDetailPostId, "comments"), {
+    await addDoc(collection(currentPostDoc(activeDetailPostId), "comments"), {
       text,
       authorName: localStorage.getItem(NAME_KEY) || "익명",
       authorUid: currentUser.uid,
