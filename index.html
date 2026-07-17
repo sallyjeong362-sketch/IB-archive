@@ -173,7 +173,7 @@
 <div id="newPostModal" class="modal-overlay" hidden>
   <div class="modal">
     <div class="modal-header">
-      <h2>새 자료 등록</h2>
+      <h2 id="postModalTitle">새 자료 등록</h2>
       <button class="modal-close" data-close="newPostModal">✕</button>
     </div>
     <div class="modal-body">
@@ -205,12 +205,13 @@
         <label for="postAction">실제 진행한 활동 설명</label>
         <textarea id="postAction" rows="5" placeholder="수업 중 실제로 진행한 활동, 순서, 학생 반응, 유의점 등을 적어주세요."></textarea>
       </div>
+      <p id="existingAttachmentsNote" class="hint" hidden></p>
       <div class="field">
-        <label for="fileInput">파일 첨부 (문서/PPT/PDF 등)</label>
+        <label for="fileInput" id="fileInputLabel">파일 첨부 (문서/PPT/PDF 등)</label>
         <input type="file" id="fileInput" multiple>
       </div>
       <div class="field">
-        <label for="imageInput">이미지 첨부</label>
+        <label for="imageInput" id="imageInputLabel">이미지 첨부</label>
         <input type="file" id="imageInput" accept="image/*" multiple>
       </div>
       <div class="field">
@@ -276,6 +277,7 @@
 
       <div class="detail-block">
         <div class="detail-actions" id="detailOwnerActions" hidden>
+          <button id="editPostBtn" class="btn small">✏️ 수정 (파일 추가 등)</button>
           <button id="deletePostBtn" class="btn danger small">이 자료 삭제</button>
         </div>
       </div>
