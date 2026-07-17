@@ -3,7 +3,7 @@ import {
   getAuth, signInAnonymously, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {
-  getFirestore, collection, addDoc, doc, setDoc, deleteDoc, onSnapshot,
+  getFirestore, collection, addDoc, doc, setDoc, updateDoc, deleteDoc, onSnapshot,
   query, orderBy, serverTimestamp
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 import {
@@ -63,6 +63,7 @@ let currentUnitId = null;
 let currentUnitName = "";
 
 let activeDetailPostId = null;
+let editingPostId = null;
 let linkRowCount = 0;
 let selectedUoi = null;
 
@@ -695,6 +696,12 @@ $("profileFilter").addEventListener("change", renderPostList);
 // ---------- new post ----------
 
 $("newPostBtn").addEventListener("click", () => {
+  editingPostId = null;
+  $("postModalTitle").textContent = "새 자료 등록";
+  $("submitPostBtn").textContent = "등록하기";
+  $("fileInputLabel").textContent = "파일 첨부 (문서/PPT/PDF 등)";
+  $("imageInputLabel").textContent = "이미지 첨부";
+  $("existingAttachmentsNote").hidden = true;
   $("postTitle").value = "";
   $("postTags").value = "";
   $("postText").value = "";
@@ -712,19 +719,62 @@ $("newPostBtn").addEventListener("click", () => {
   openModal("newPostModal");
 });
 
-function addLinkRow() {
+function openEditPost(p) {
+  closeModal("detailModal");
+  editingPostId = p.id;
+  $("postModalTitle").textContent = "자료 수정";
+  $("submitPostBtn").textContent = "수정하기";
+  $("postTitle").value = p.title || "";
+  $("postTags").value = (p.tags || []).join(", ");
+  $("postText").value = p.lessonText || "";
+  $("postAction").value = p.actionDescription || "";
+  $("fileInput").value = "";
+  $("imageInput").value = "";
+  $("linkRows").innerHTML = "";
+  linkRowCount = 0;
+  const existingLinks = p.links || [];
+  if (existingLinks.length === 0) {
+    addLinkRow();
+  } else {
+    existingLinks.forEach((l) => addLinkRow(l.label, l.url));
+  }
+
+  selectedUoi = p.uoi || null;
+  $("uoiButtons").querySelectorAll(".uoi-btn").forEach((b) => {
+    b.classList.toggle("active", b.dataset.uoi === selectedUoi);
+  });
+  $("categoryChecks").querySelectorAll("input[type=checkbox]").forEach((c) => {
+    c.checked = (p.categories || []).includes(c.value);
+  });
+  $("profileChecks").querySelectorAll("input[type=checkbox]").forEach((c) => {
+    c.checked = (p.learnerProfile || []).includes(c.value);
+  });
+
+  const fileCount = (p.files || []).length;
+  const imgCount = (p.images || []).length;
+  $("existingAttachmentsNote").hidden = fileCount === 0 && imgCount === 0;
+  $("existingAttachmentsNote").textContent =
+    `기존 첨부: 파일 ${fileCount}개, 이미지 ${imgCount}개 (그대로 유지됩니다. 아래에서 추가로 더 올릴 수 있습니다.)`;
+  $("fileInputLabel").textContent = "파일 추가 첨부 (문서/PPT/PDF 등)";
+  $("imageInputLabel").textContent = "이미지 추가 첨부";
+
+  $("postError").hidden = true;
+  openModal("newPostModal");
+}
+
+function addLinkRow(label = "", url = "") {
   const id = "link_" + (linkRowCount++);
   const row = document.createElement("div");
   row.className = "link-row";
   row.dataset.rowId = id;
   row.innerHTML = `
-    <input type="text" class="link-label" placeholder="링크 이름 (예: 참고 영상)">
-    <input type="text" class="link-url" placeholder="https://...">
+    <input type="text" class="link-label" placeholder="링크 이름 (예: 참고 영상)" value="${escapeHtml(label)}">
+    <input type="text" class="link-url" placeholder="https://..." value="${escapeHtml(url)}">
     <button type="button" class="btn small remove-link">삭제</button>`;
   row.querySelector(".remove-link").addEventListener("click", () => row.remove());
   $("linkRows").appendChild(row);
 }
-$("addLinkBtn").addEventListener("click", addLinkRow);
+$("addLinkBtn").addEventListener("click", () => addLinkRow());
 
 function collectLinks() {
   return [...document.querySelectorAll("#linkRows .link-row")].map((row) => {
@@ -767,27 +817,18 @@ $("submitPostBtn").addEventListener("click", async () => {
     return;
   }
 
+  const wasEditing = !!editingPostId;
   const submitBtn = $("submitPostBtn");
   submitBtn.disabled = true;
   submitBtn.textContent = "업로드 중...";
 
   try {
     const tags = $("postTags").value.split(",").map((t) => t.trim()).filter(Boolean);
-    // Use a client-generated doc id up front so uploaded files can be grouped under it.
-    const newDocRef = doc(currentPostsCollection());
-    const pathPrefix = `uploads/${currentTextbookId}/${currentUnitId}/${newDocRef.id}`;
-
-    const [files, images] = await Promise.all([
-      uploadFileList($("fileInput").files, pathPrefix),
-      uploadFileList($("imageInput").files, pathPrefix),
-    ]);
-
     const linksWithType = links.map((l) => {
       const yid = extractYoutubeId(l.url);
       return { url: l.url, label: l.label || "", type: yid ? "youtube" : "link", youtubeId: yid || null };
     });
-
-    await setDoc(newDocRef, {
+    const commonFields = {
       title,
       tags,
       uoi: selectedUoi,
@@ -795,23 +836,50 @@ $("submitPostBtn").addEventListener("click", async () => {
       learnerProfile: collectCheckedValues("profileChecks"),
       lessonText: $("postText").value.trim(),
       actionDescription: $("postAction").value.trim(),
-      files,
-      images,
       links: linksWithType,
-      authorName: localStorage.getItem(NAME_KEY) || "익명",
-      authorUid: currentUser.uid,
-      createdAt: serverTimestamp(),
-    });
+    };
 
-    closeModal("newPostModal");
-    showToast("자료가 등록되었습니다.");
+    if (wasEditing) {
+      const existing = posts.find((x) => x.id === editingPostId);
+      const pathPrefix = `uploads/${currentTextbookId}/${currentUnitId}/${editingPostId}`;
+      const [newFiles, newImages] = await Promise.all([
+        uploadFileList($("fileInput").files, pathPrefix),
+        uploadFileList($("imageInput").files, pathPrefix),
+      ]);
+      await updateDoc(currentPostDoc(editingPostId), {
+        ...commonFields,
+        files: [...(existing?.files || []), ...newFiles],
+        images: [...(existing?.images || []), ...newImages],
+      });
+      editingPostId = null;
+      closeModal("newPostModal");
+      showToast("자료가 수정되었습니다.");
+    } else {
+      // Use a client-generated doc id up front so uploaded files can be grouped under it.
+      const newDocRef = doc(currentPostsCollection());
+      const pathPrefix = `uploads/${currentTextbookId}/${currentUnitId}/${newDocRef.id}`;
+      const [files, images] = await Promise.all([
+        uploadFileList($("fileInput").files, pathPrefix),
+        uploadFileList($("imageInput").files, pathPrefix),
+      ]);
+      await setDoc(newDocRef, {
+        ...commonFields,
+        files,
+        images,
+        authorName: localStorage.getItem(NAME_KEY) || "익명",
+        authorUid: currentUser.uid,
+        createdAt: serverTimestamp(),
+      });
+      closeModal("newPostModal");
+      showToast("자료가 등록되었습니다.");
+    }
   } catch (err) {
     console.error(err);
     $("postError").hidden = false;
-    $("postError").textContent = "등록 중 오류가 발생했습니다: " + err.message;
+    $("postError").textContent = (wasEditing ? "수정" : "등록") + " 중 오류가 발생했습니다: " + err.message;
   } finally {
     submitBtn.disabled = false;
-    submitBtn.textContent = "등록하기";
+    submitBtn.textContent = wasEditing ? "수정하기" : "등록하기";
   }
 });
 
@@ -890,6 +958,7 @@ function renderDetail(p) {
 
   const ownerActions = $("detailOwnerActions");
   ownerActions.hidden = !(currentUser && p.authorUid === currentUser.uid);
+  $("editPostBtn").onclick = () => openEditPost(p);
   $("deletePostBtn").onclick = () => deletePost(p);
 }
 
