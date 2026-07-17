@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>수업자료 아카이브</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- 1) Firebase 연결 설정 화면 -->
+<div id="setupScreen" class="screen">
+  <div class="setup-card">
+    <h1>수업자료 아카이브 설정</h1>
+    <p class="hint">
+      이 앱은 선생님들이 같은 자료를 실시간으로 함께 보고 공유하기 위해 Firebase(무료)를 사용합니다.
+      아래 순서대로 한 번만 설정하면 됩니다.
+    </p>
+    <ol class="setup-steps">
+      <li><a href="https://console.firebase.google.com/" target="_blank" rel="noopener">Firebase 콘솔</a>에서 새 프로젝트를 만듭니다.</li>
+      <li>왼쪽 메뉴에서 <b>Firestore Database</b>를 만듭니다 (프로덕션 모드로 시작해도 됩니다).</li>
+      <li><b>Storage</b>를 만듭니다 (파일/이미지 업로드용).</li>
+      <li><b>Authentication</b> &gt; Sign-in method에서 <b>익명(Anonymous)</b> 로그인을 사용 설정합니다.</li>
+      <li>프로젝트 설정(톱니바퀴) &gt; 일반 &gt; 내 앱에서 <b>웹 앱 추가</b> 후 나오는 <code>firebaseConfig</code> 객체 전체를 복사해서 아래에 붙여넣습니다.</li>
+      <li>저장소의 <code>firestore.rules</code>, <code>storage.rules</code> 파일 내용을 Firebase 콘솔의 각 규칙 탭에 붙여넣고 게시합니다.</li>
+    </ol>
+    <div class="field">
+      <label for="configInput">firebaseConfig 붙여넣기</label>
+      <textarea id="configInput" rows="8" placeholder='{
+  "apiKey": "...",
+  "authDomain": "...",
+  "projectId": "...",
+  "storageBucket": "...",
+  "messagingSenderId": "...",
+  "appId": "..."
+}'></textarea>
+    </div>
+    <div id="setupError" class="error-box" hidden></div>
+    <button id="saveConfigBtn" class="btn primary">연결하고 시작하기</button>
+  </div>
+</div>
+
+<!-- 2) 이름 입력 화면 -->
+<div id="nameScreen" class="screen" hidden>
+  <div class="setup-card">
+    <h1>안녕하세요 👋</h1>
+    <p class="hint">자료와 댓글에 표시할 이름(또는 별명)을 입력해주세요.</p>
+    <div class="field">
+      <label for="nameInput">이름 / 별명</label>
+      <input type="text" id="nameInput" placeholder="예: 김민지 선생님" maxlength="30">
+    </div>
+    <div id="nameError" class="error-box" hidden></div>
+    <button id="saveNameBtn" class="btn primary">시작하기</button>
+  </div>
+</div>
+
+<!-- 3) 메인 앱 -->
+<div id="app" class="screen" hidden>
+  <header class="app-header">
+    <div class="header-title">
+      <h1>📚 수업자료 아카이브</h1>
+      <p class="subtitle">선생님들과 함께 만드는 수업 자료 모음</p>
+    </div>
+    <div class="header-user">
+      <span id="currentUserName" class="user-badge"></span>
+      <button id="changeNameBtn" class="btn small">이름 변경</button>
+      <button id="changeConfigBtn" class="btn small">연결 설정</button>
+    </div>
+  </header>
+
+  <div class="toolbar">
+    <input type="text" id="searchInput" placeholder="🔍 제목, 내용, 과목으로 검색">
+    <select id="subjectFilter">
+      <option value="">전체 과목/태그</option>
+    </select>
+    <button id="newPostBtn" class="btn primary">+ 새 자료 등록</button>
+  </div>
+
+  <div id="postList" class="post-list"></div>
+  <p id="emptyNote" class="empty-note" hidden>아직 등록된 자료가 없습니다. 첫 자료를 등록해보세요!</p>
+  <p id="loadingNote" class="empty-note">불러오는 중...</p>
+</div>
+
+<!-- 새 자료 등록 모달 -->
+<div id="newPostModal" class="modal-overlay" hidden>
+  <div class="modal">
+    <div class="modal-header">
+      <h2>새 자료 등록</h2>
+      <button class="modal-close" data-close="newPostModal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label for="postTitle">제목 *</label>
+        <input type="text" id="postTitle" placeholder="예: 3학년 분수의 덧셈 수업" maxlength="120">
+      </div>
+      <div class="field">
+        <label for="postTags">과목 / 학년 / 태그 (쉼표로 구분)</label>
+        <input type="text" id="postTags" placeholder="예: 수학, 3학년, 분수">
+      </div>
+      <div class="field">
+        <label for="postText">수업에 쓰인 텍스트 / 내용</label>
+        <textarea id="postText" rows="5" placeholder="수업에서 다룬 본문, 발문, 설명 텍스트 등을 적어주세요."></textarea>
+      </div>
+      <div class="field">
+        <label for="postAction">실제 진행한 활동 설명</label>
+        <textarea id="postAction" rows="5" placeholder="수업 중 실제로 진행한 활동, 순서, 학생 반응, 유의점 등을 적어주세요."></textarea>
+      </div>
+      <div class="field">
+        <label for="fileInput">파일 첨부 (문서/PPT/PDF 등)</label>
+        <input type="file" id="fileInput" multiple>
+      </div>
+      <div class="field">
+        <label for="imageInput">이미지 첨부</label>
+        <input type="file" id="imageInput" accept="image/*" multiple>
+      </div>
+      <div class="field">
+        <label>외부 링크 (유튜브 영상, 참고 자료 등)</label>
+        <div id="linkRows" class="link-rows"></div>
+        <button type="button" id="addLinkBtn" class="btn small">+ 링크 추가</button>
+      </div>
+      <div id="postError" class="error-box" hidden></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" data-close="newPostModal">취소</button>
+      <button id="submitPostBtn" class="btn primary">등록하기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 자료 상세 + 댓글 모달 -->
+<div id="detailModal" class="modal-overlay" hidden>
+  <div class="modal modal-wide">
+    <div class="modal-header">
+      <h2 id="detailTitle"></h2>
+      <button class="modal-close" data-close="detailModal">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="detailMeta" class="detail-meta"></div>
+      <div id="detailTags" class="detail-tags"></div>
+
+      <div id="detailTextBlock" class="detail-block">
+        <h3>수업에 쓰인 텍스트 / 내용</h3>
+        <p id="detailText" class="detail-text"></p>
+      </div>
+
+      <div id="detailActionBlock" class="detail-block">
+        <h3>실제 진행한 활동 설명</h3>
+        <p id="detailAction" class="detail-text"></p>
+      </div>
+
+      <div id="detailFilesBlock" class="detail-block">
+        <h3>첨부 파일</h3>
+        <ul id="detailFiles" class="file-list"></ul>
+      </div>
+
+      <div id="detailImagesBlock" class="detail-block">
+        <h3>이미지</h3>
+        <div id="detailImages" class="image-gallery"></div>
+      </div>
+
+      <div id="detailLinksBlock" class="detail-block">
+        <h3>외부 링크</h3>
+        <div id="detailLinks" class="link-cards"></div>
+      </div>
+
+      <div class="detail-block">
+        <div class="detail-actions" id="detailOwnerActions" hidden>
+          <button id="deletePostBtn" class="btn danger small">이 자료 삭제</button>
+        </div>
+      </div>
+
+      <div class="comments-section">
+        <h3>💬 댓글 / 코멘트</h3>
+        <div id="commentList" class="comment-list"></div>
+        <div class="comment-form">
+          <textarea id="commentInput" rows="2" placeholder="이 자료에 대한 의견이나 사용 후기를 남겨주세요."></textarea>
+          <button id="submitCommentBtn" class="btn primary small">댓글 달기</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
