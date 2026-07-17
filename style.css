@@ -106,6 +106,26 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: #185FA5
 .link-row input { flex: 1; }
 .link-row .btn { padding: 0.5rem 0.7rem; }
 
+/* Unit of Inquiry / category / learner profile pickers */
+.uoi-buttons { display: flex; flex-wrap: wrap; gap: 8px; }
+.uoi-btn {
+  border: 2px solid transparent; border-radius: 8px; padding: 0.5rem 0.85rem; font-size: 13px;
+  font-weight: 600; color: #fff; cursor: pointer; opacity: 0.55;
+}
+.uoi-btn.active { opacity: 1; border-color: #1a1a18; }
+
+.check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 6px 10px; }
+.profile-grid { grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); }
+.check-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #333; cursor: pointer; }
+.check-item input { width: auto; }
+
+.uoi-pill {
+  display: inline-flex; align-items: center; gap: 6px; color: #fff; font-size: 12px; font-weight: 700;
+  border-radius: 999px; padding: 4px 12px;
+}
+.detail-uoi { margin-bottom: 0.5rem; }
+.post-card .post-uoi { margin-bottom: 2px; }
+
 /* Detail view */
 .detail-meta { font-size: 12.5px; color: #999; margin-bottom: 0.5rem; }
 .detail-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 1rem; }
