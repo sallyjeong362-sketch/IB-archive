@@ -123,7 +123,28 @@ function showToast(msg) {
 }
 
 function showScreen(id) {
-  ["setupScreen", "nameScreen", "app"].forEach((s) => { $(s).hidden = s !== id; });
+  ["loadingScreen", "setupScreen", "nameScreen", "app"].forEach((s) => { $(s).hidden = s !== id; });
+}
+
+// UTF-8 safe base64 helpers, used to embed firebaseConfig in a shareable URL.
+function b64EncodeUnicode(str) {
+  return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16))));
+}
+function b64DecodeUnicode(str) {
+  return decodeURIComponent(atob(str).split("").map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2)).join(""));
+}
+function buildShareUrl(config) {
+  const encoded = b64EncodeUnicode(JSON.stringify(config));
+  return `${location.origin}${location.pathname}#cfg=${encoded}`;
+}
+function extractConfigFromHash() {
+  const m = location.hash.match(/(?:^#|[#&])cfg=([^&]+)/);
+  if (!m) return null;
+  try {
+    return JSON.parse(b64DecodeUnicode(decodeURIComponent(m[1])));
+  } catch {
+    return null;
+  }
 }
 
 function openModal(id) { $(id).hidden = false; }
@@ -184,6 +205,15 @@ renderTaxonomyFilters();
 // ---------- bootstrap ----------
 
 function boot() {
+  // 공유 링크(#cfg=...)로 들어온 경우: 설정 화면 없이 바로 연결한다.
+  const hashConfig = extractConfigFromHash();
+  if (hashConfig) {
+    localStorage.setItem(CONFIG_KEY, JSON.stringify(hashConfig));
+    history.replaceState(null, "", location.pathname + location.search);
+    initFirebase(hashConfig);
+    return;
+  }
+
   const savedConfig = localStorage.getItem(CONFIG_KEY);
   if (!savedConfig) {
     showScreen("setupScreen");
@@ -302,6 +332,18 @@ $("changeConfigBtn").addEventListener("click", () => {
   if (confirm("Firebase 연결 설정을 변경하시겠습니까? 다시 설정 화면으로 이동합니다.")) {
     localStorage.removeItem(CONFIG_KEY);
     location.reload();
+  }
+});
+
+$("copyShareLinkBtn").addEventListener("click", async () => {
+  const savedConfig = localStorage.getItem(CONFIG_KEY);
+  if (!savedConfig) return;
+  const url = buildShareUrl(JSON.parse(savedConfig));
+  try {
+    await navigator.clipboard.writeText(url);
+    showToast("공유 링크가 복사되었습니다. 다른 선생님께 보내주세요.");
+  } catch {
+    prompt("아래 링크를 복사해서 다른 선생님께 보내주세요:", url);
   }
 });
 
