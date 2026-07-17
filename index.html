@@ -73,10 +73,12 @@
   <!-- 1단계: 교재 목록 -->
   <div id="textbookView">
     <div class="toolbar">
+      <input type="text" id="textbookSearchInput" placeholder="🔍 교재 이름으로 검색 (같은 교재가 이미 있는지 먼저 확인해보세요)">
       <button id="newTextbookBtn" class="btn primary">+ 새 교재 등록</button>
     </div>
     <div id="textbookList" class="textbook-grid"></div>
     <p id="textbookEmptyNote" class="empty-note" hidden>아직 등록된 교재가 없습니다. 첫 교재를 등록해보세요!</p>
+    <p id="textbookNoMatchNote" class="empty-note" hidden>검색 결과가 없습니다.</p>
     <p id="textbookLoadingNote" class="empty-note">불러오는 중...</p>
   </div>
 

@@ -412,12 +412,19 @@ function subscribeTextbooks() {
 }
 
 function renderTextbookList() {
+  const search = $("textbookSearchInput").value.trim().toLowerCase();
+  const filtered = search
+    ? textbooks.filter((t) => (t.name || "").toLowerCase().includes(search))
+    : textbooks;
+
   $("textbookEmptyNote").hidden = textbooks.length !== 0;
-  $("textbookList").innerHTML = textbooks.map(renderTextbookCard).join("");
+  $("textbookNoMatchNote").hidden = !(textbooks.length !== 0 && search && filtered.length === 0);
+  $("textbookList").innerHTML = filtered.map(renderTextbookCard).join("");
   document.querySelectorAll(".textbook-card").forEach((card) => {
     card.addEventListener("click", () => openTextbook(card.dataset.id));
   });
 }
+$("textbookSearchInput").addEventListener("input", renderTextbookList);
 
 function renderTextbookCard(t) {
   const cover = t.coverUrl
