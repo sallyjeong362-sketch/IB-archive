@@ -147,6 +147,38 @@ function startApp(name) {
 
 // ---------- setup screen ----------
 
+// Firebase 콘솔이 보여주는 코드는 키에 따옴표가 없는 JS 객체 리터럴이라 JSON.parse가 실패한다.
+// import/const/initializeApp 같은 나머지 코드가 섞여 붙여넣어져도 동작하도록, 코드 안의 모든
+// 최상위 { ... } 블록을 찾아 apiKey가 들어있는 블록(= firebaseConfig 객체)을 골라낸다.
+function extractBracedObject(text) {
+  const blocks = [];
+  for (let i = 0; i < text.length; i++) {
+    if (text[i] !== "{") continue;
+    let depth = 1, j = i + 1;
+    for (; j < text.length; j++) {
+      if (text[j] === "{") depth++;
+      else if (text[j] === "}") { depth--; if (depth === 0) break; }
+    }
+    if (depth === 0) {
+      blocks.push(text.slice(i, j + 1));
+      i = j;
+    }
+  }
+  if (blocks.length === 0) return null;
+  return blocks.find((b) => b.includes("apiKey")) || blocks.reduce((a, b) => (b.length > a.length ? b : a));
+}
+
+function parseFirebaseConfigInput(raw) {
+  const objText = extractBracedObject(raw) || raw;
+  try {
+    return JSON.parse(objText);
+  } catch {
+    // fall through to JS object literal parsing below
+  }
+  // Safe here: this only evaluates the current user's own pasted input, in their own browser.
+  return new Function("return (" + objText + ")")();
+}
+
 $("saveConfigBtn").addEventListener("click", () => {
   const raw = $("configInput").value.trim();
   $("setupError").hidden = true;
@@ -157,10 +189,11 @@ $("saveConfigBtn").addEventListener("click", () => {
   }
   let parsed;
   try {
-    parsed = JSON.parse(raw);
+    parsed = parseFirebaseConfigInput(raw);
+    if (!parsed || typeof parsed !== "object") throw new Error("empty");
   } catch {
     $("setupError").hidden = false;
-    $("setupError").textContent = "JSON 형식이 올바르지 않습니다. Firebase 콘솔에서 복사한 그대로 붙여넣어주세요.";
+    $("setupError").textContent = "firebaseConfig 값을 해석하지 못했습니다. Firebase 콘솔에서 복사한 코드를 그대로 붙여넣어주세요.";
     return;
   }
   const required = ["apiKey", "authDomain", "projectId", "storageBucket", "appId"];
