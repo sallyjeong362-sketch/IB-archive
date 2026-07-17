@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// 수업자료 아카이브 - Firestore 보안 규칙
+// Firebase 콘솔 > Firestore Database > 규칙 탭에 이 내용을 붙여넣고 게시하세요.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // 자료 게시물
+    match /posts/{postId} {
+      allow read: if true;
+      allow create: if request.auth != null
+        && request.resource.data.authorUid == request.auth.uid
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() < 200;
+      allow update, delete: if request.auth != null
+        && request.auth.uid == resource.data.authorUid;
+
+      // 게시물별 댓글
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if request.auth != null
+          && request.resource.data.authorUid == request.auth.uid
+          && request.resource.data.text is string
+          && request.resource.data.text.size() > 0
+          && request.resource.data.text.size() < 2000;
+        allow update, delete: if request.auth != null
+          && request.auth.uid == resource.data.authorUid;
+      }
+    }
+  }
+}
